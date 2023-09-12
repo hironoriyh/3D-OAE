@@ -1,12 +1,15 @@
 import torch
 from torch import nn
 
-from pointnet2_ops import pointnet2_utils
+# import ipdb; ipdb.set_trace()
+# from pointnet2_ops import pointnet2_utils
+from pointnet2.utils import pointnet2_utils
 from extensions.chamfer_dist import ChamferDistanceL1
 from utils.logger import print_log
 from models.PoinTr_utils.PoinTr_ST import PCTransformer
 from .build import MODELS
 from utils.checkpoint import *
+
 
 
 def fps(pc, num):
@@ -90,9 +93,12 @@ class OAE_PoinTr(nn.Module):
         loss_fine = self.loss_func(ret[1], gt)
         return loss_coarse, loss_fine
 
-    def forward(self, xyz):
-        q, coarse_point_cloud = self.base_model(xyz) # B M C and B M 3
-    
+    def forward(self, xyz, skelnet=None, return_center=False, pc_skeletor=False):
+        
+        if pc_skeletor:
+            q, coarse_point_cloud, center, xyz = self.base_model(xyz, skelnet=skelnet, return_center=True, pc_skeletor=pc_skeletor) # B M C and B M 3
+        else:
+            q, coarse_point_cloud, center = self.base_model(xyz, skelnet=skelnet, return_center=True, pc_skeletor=pc_skeletor) # B M C and B M 3
         B, M ,C = q.shape
 
         global_feature = self.increase_dim(q.transpose(1,2)).transpose(1,2) # B M 1024
@@ -116,6 +122,15 @@ class OAE_PoinTr(nn.Module):
         coarse_point_cloud = torch.cat([coarse_point_cloud, inp_sparse], dim=1).contiguous()
         rebuild_points = torch.cat([rebuild_points, xyz],dim=1).contiguous()
 
-        ret = (coarse_point_cloud, rebuild_points)
+        
+        if return_center: # skeleton
+            if pc_skeletor: 
+                ret = (coarse_point_cloud, rebuild_points, center, xyz)
+            else: # skelnet
+                ret = (coarse_point_cloud, rebuild_points, center)
+
+        else: # normal
+            ret = (coarse_point_cloud, rebuild_points)
+
         return ret
 

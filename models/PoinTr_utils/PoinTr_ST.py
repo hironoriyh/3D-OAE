@@ -2,12 +2,18 @@ import torch
 import torch.nn as nn
 
 from timm.models.layers import DropPath,trunc_normal_
+from models.SkelPointNet import SkelPointNet
 
 from .dgcnn_group import DGCNN_Grouper
 from utils.logger import *
 import numpy as np
 from knn_cuda import KNN
 from models.Point_OAE import *
+
+from extensions.pc_skeletor.laplacian import LBC
+import open3d as o3d
+
+
 knn = KNN(k=8, transpose_mode=False)
 
 def get_knn_index(coor_q, coor_k=None):
@@ -359,14 +365,60 @@ class PCTransformer(nn.Module):
 
         print_log(f'[Transformer] Successful Loading the ckpt from {bert_ckpt_path}', logger = 'Transformer')
 
-    def forward(self, inpc):
+    def pcskel_neighbor(self, pcd):
+                ### test pc-skeletor
+        # pcd = inpc.squeeze(0).to("cpu").detach().numpy().copy()
+        pcd0_o3d = o3d.geometry.PointCloud()
+        pcd0_o3d.points = o3d.utility.Vector3dVector(pcd)
+        # lbc = LBC(point_cloud=pcd0_o3d, down_sample=0.008)
+        # lbc = LBC(point_cloud=pcd0_o3d.scale(100, [0,0,0]), down_sample=0.01)
+        lbc = LBC(point_cloud=pcd0_o3d, down_sample=0.01)
+
+        lbc.extract_skeleton()
+        lbc.extract_topology(fps_points=128)
+        skel =np.asarray([x[1]["pos"] for x in lbc.skeleton_graph.nodes.data()])
+
+        pcd = self.nprandom_sample(pcd, 2048)
+        inpc = torch.tensor(pcd).float().cuda(0).unsqueeze(0)
+        skelcuda = torch.tensor(skel).float().cuda(0).unsqueeze(0)
+
+        # from knn_cuda import KNN
+        groupsize = 16 #2048/128 int(pcd.shape[0]/skel.shape[0])
+
+        knn = KNN(k=groupsize, transpose_mode=True)
+        _, idx = knn(inpc, skelcuda)
+        assert idx.size(1) == skel.shape[0] #num_group
+        assert idx.size(2) == groupsize #group_size
+    
+        # _, idx = knn(torch.tensor(pcd).float().cuda(0), torch.tensor(skel).float().cuda(0))
+        idx_base = torch.arange(0, 1, device=0).view(-1, 1, 1) * pcd.shape[0]
+        idx = idx + idx_base
+        neighborhood = inpc.view(1 * pcd.shape[0], -1)[idx, :]
+
+        return skelcuda, neighborhood, inpc
+
+    def nprandom_sample(self, pc, num):
+        permutation = np.arange(pc.shape[0])
+        np.random.shuffle(permutation)
+        pc = pc[permutation[:num]]
+        return pc
+
+    def forward(self, inpc, skelnet=None, return_center=False, pc_skeletor=False):
         '''
             inpc : input incomplete point cloud with shape B N(2048) C(3)
         '''
         #--------------------------stand_transformer_encoder-----------------------------
-        bs = inpc.size(0)
-        # divide the point clo  ud in the same form. This is important
-        neighborhood, center = self.group_divider(inpc)
+        bs = inpc.shape[0] #size(0)
+
+        # divide the point cloud in the same form. This is important
+        if skelnet is None and pc_skeletor is False:
+            neighborhood, center = self.group_divider(inpc)
+        elif pc_skeletor is True:
+            center, neighborhood, inpc = self.pcskel_neighbor(inpc.squeeze(0))
+        else:
+            # skel xyz and neibouring
+            center, _, _, neighborhood = skelnet(inpc, group=True)
+        
         # encoder the input cloud blocks
         group_input_tokens = self.encoder(neighborhood)  #  B G N
         group_input_tokens = self.reduce_dim(group_input_tokens)
@@ -397,5 +449,12 @@ class PCTransformer(nn.Module):
                 q = blk(q, x, new_knn_index, cross_knn_index)   # B M C
             else:
                 q = blk(q, x)
-
-        return q, coarse_point_cloud
+                
+        if return_center:
+            if pc_skeletor:
+                return q, coarse_point_cloud, center, inpc
+            else: # skelnet
+                return q, coarse_point_cloud, center
+            
+        else: # normal without skelnet nor pc_skeletor
+            return q, coarse_point_cloud

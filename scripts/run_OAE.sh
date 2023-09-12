@@ -5,4 +5,4 @@ GPUS=$1
 
 PY_ARGS=${@:2}
 
-CUDA_VISIBLE_DEVICES=${GPUS} python main_OAE.py ${PY_ARGS}
+CUDA_VISIBLE_DEVICES="0,1,2" python main_OAE.py ${PY_ARGS}

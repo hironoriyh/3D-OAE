@@ -2,9 +2,14 @@
 HOME=`pwd`
 
 # Chamfer Distance
-cd $HOME/extensions/chamfer_dist
-python setup.py install --user
+cd extensions/chamfer_dist
+# python setup.py install --user
+python setup.py build_ext --inplace
+
+
 
 # EMD
 cd $HOME/extensions/emd
-python setup.py install --user
+# python setup.py install --user
+python setup.py build_ext --inplace
+

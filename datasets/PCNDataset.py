@@ -38,6 +38,7 @@ class PCN(data.Dataset):
         self.file_list = self._get_file_list(self.subset, self.n_renderings)
         self.transforms = self._get_transforms(self.subset)
 
+
     def _get_transforms(self, subset):
         if subset == 'train':
             return data_transforms.Compose([{
@@ -74,7 +75,7 @@ class PCN(data.Dataset):
             samples = dc[subset]
 
             for s in samples:
-                file_list.append({
+                path = {
                     'taxonomy_id':
                     dc['taxonomy_id'],
                     'model_id':
@@ -85,7 +86,11 @@ class PCN(data.Dataset):
                     ] if subset=="train" else [self.test_partial_points_path % (subset, dc['taxonomy_id'], s)],
                     'gt_path':
                     self.complete_points_path % (subset, dc['taxonomy_id'], s),
-                })
+                }
+
+                if(subset != "train"):
+                    path['partial_path'][0] = path['partial_path'][0][:-4] + "/00.pcd"
+                file_list.append(path)
 
         print_log('Complete collecting files of the dataset. Total files: %d' % len(file_list), logger='PCNDATASET')
         return file_list
@@ -93,7 +98,7 @@ class PCN(data.Dataset):
     def __getitem__(self, idx):
         sample = self.file_list[idx]
         data = {}
-        rand_idx = random.randint(0, self.n_renderings - 1) if self.subset=='train' else 0
+        rand_idx = random.randint(0, self.n_renderings - 1)     
 
         for ri in ['partial', 'gt']:
             file_path = sample['%s_path' % ri]

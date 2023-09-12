@@ -18,9 +18,6 @@ from models.util_models import Group
 
 from models.SkelPointNet import SkelPointNet
 
-import open3d as o3d
-# import ipdb
-from extensions.pc_skeletor.laplacian import LBC
 
 def run_net(args, config, train_writer=None, val_writer=None):
     logger = get_logger(args.log_name)
@@ -452,27 +449,24 @@ def inference_net(args, config, data_path):
     # scaled_data_torch = torch.tensor(scaled_data).float().cuda(0)
     # scaled_data_torch = scaled_data_torch.unsqueeze(0).reshape(num_group, -1, 3)
     groupsingle = "_group" if args.groups else "_single"
-    save_path = os.path.join("experiments", data_path.split("/")[-1][:-4]+"_"+args.ckpts.split("/")[-2]+groupsingle)
+    args.pc_skeletor = True
+    # import ipdb; ipdb.set_trace()
+    groupsingle += "_pcskeletor" # if args.pc_skeletor
+    save_path = os.path.join("experiments", data_path.split("/")[-1][:-4]+"_"+args.ckpts.split("/")[-2] + groupsingle)
 
     os.makedirs(save_path, exist_ok=True)
 
     if(args.groups is False):
         ### single input (128 center points)
-        skel, neighborhood = pc_skeletor(scaled_data) ### ToDo test pc-skeletor
-        import ipdb; ipdb.set_trace()
-        neighborhood = neighborhood.squeeze(0).to("cpu").detach().numpy().copy() 
-        neighborhood = neighborhood[:, ::100, :]
-        idxneighb = np.zeros(neighborhood.shape[:2]) 
-        for i in range(0, idxneighb.shape[0]): idxneighb[i, :] = i 
-        savefig(neighborhood.rehsape(-1, 3), "3_2_pcskel_neighbor.png", color=idxneighb.flatten())
+        with torch.no_grad():
 
-        savefig(scaled_data[::100, :], "0_input.png")
-        center, _, _, neighborhood = skel_net(torch.tensor(scaled_data).float().cuda(0).unsqueeze(0), group=True)
-        # savefig(center, "1_skelnet_center.png")
-        savefig(center.squeeze(0).to("cpu").detach().numpy().copy(), "1_skelnet_center.png")
-        savefig(neighborhood.squeeze(0).to("cpu").detach().numpy().copy()[::50, :].reshape(-1,3), "2_skelnet_neighbor.png", size=0.5)
-
-
+            ret = base_model(scaled_data[np.newaxis, :, :], return_center=True, pc_skeletor=True)
+            begin = 0
+            end = 1
+            coarse, dense = export_imgs2(ret[0], ret[1], ret[2], ret[3], save_img_path=save_path, idx=begin)
+            print("%i to %i saved in "%(begin, end), os.path.join(save_path, "%i_dense.off"%begin) )
+            exit()
+        
         inpc = random_sample(scaled_data, 2048)
         inpc = torch.tensor(inpc).float().cuda(0).unsqueeze(0)
 
@@ -496,6 +490,7 @@ def inference_net(args, config, data_path):
         num_groups = 10
         inpc = random_sample(scaled_data, group_size * num_groups)
         inpc = torch.tensor(inpc).float().cuda(0).unsqueeze(0)
+        
         if(args.skelnet):
             centers, _, _, groups = skel_net(torch.tensor(scaled_data).float().cuda(0).unsqueeze(0), group=True)
             groups = groups.squeeze(0)
@@ -541,67 +536,11 @@ def inference_net(args, config, data_path):
         #         print("%i to %i saved in "%(idx, idx), os.path.join(save_path, "%i_dense.off"%idx) )
             
 
-def pc_skeletor(pcd):
-            ### test pc-skeletor
-    # npinpc = inpc.squeeze(0).to("cpu").detach().numpy().copy()
-    pcd0_o3d = o3d.geometry.PointCloud()
-    pcd0_o3d.points = o3d.utility.Vector3dVector(pcd)
-    # lbc = LBC(point_cloud=pcd0_o3d, down_sample=0.008)
-    # lbc = LBC(point_cloud=pcd0_o3d.scale(100, [0,0,0]), down_sample=0.01)
-    lbc = LBC(point_cloud=pcd0_o3d, down_sample=0.01)
 
-    lbc.extract_skeleton()
-    lbc.extract_topology(fps_points=128)
-    # import ipdb; ipdb.set_trace()
-    skel =np.asarray([x[1]["pos"] for x in lbc.skeleton_graph.nodes.data()])
-
-    inpc = torch.tensor(pcd).float().cuda(0).unsqueeze(0)
-    skelcuda = torch.tensor(skel).float().cuda(0).unsqueeze(0)
-    # import ipdb;ipdb.set_trace()
-
-    from knn_cuda import KNN
-    groupsize = int(pcd.shape[0]/skel.shape[0])
-    knn = KNN(k=groupsize, transpose_mode=True)
-    _, idx = knn(inpc, skelcuda)
-    assert idx.size(1) == skel.shape[0] #num_group
-    assert idx.size(2) == groupsize #group_size
-   
-    # _, idx = knn(torch.tensor(pcd).float().cuda(0), torch.tensor(skel).float().cuda(0))
-    idx_base = torch.arange(0, 1, device=0).view(-1, 1, 1) * pcd.shape[0]
-    idx = idx + idx_base
-    neighborhood = inpc.view(1 * pcd.shape[0], -1)[idx, :]
-
-    return skel, neighborhood
 
     ###
 
-def voxel_grid(pcd):
-    pcd0_o3d = o3d.geometry.PointCloud()
-    pcd0_o3d.points = o3d.utility.Vector3dVector(pcd)
-    voxel_grid = o3d.geometry.VoxelGrid.create_from_point_cloud(pcd0_o3d, voxel_size=0.05)
-    indices = np.stack(list(vx.grid_index for vx in voxel_grid.get_voxels()))
-    voxels = np.zeros(indices.max(axis=0)+1)
-    voxels[indices.transpose()[0], indices.transpose()[1], indices.transpose()[2]] = 1
-    return voxels
 
-def savefig(pcd, name, rangesize=0.5, size=1, save=True, color="blue"):
-
-    if torch.is_tensor(pcd):
-        print("is tensor")
-        pcd=pcd.squeeze(0).to("cpu").detach().numpy().copy()
-    fig = plt.figure()
-    fig.set_size_inches(10, 10)
-    ax = fig.add_subplot(111, projection='3d')
-    cmap = plt.cm.jet
-    ax.scatter3D (pcd[:, 0],pcd[:, 1],pcd[:, 2], c=color, s=size, cmap=cmap)
-    ax.set_title(name)
-    ax.set_xlim(-rangesize, rangesize)
-    ax.set_ylim(-rangesize, rangesize)
-    ax.set_zlim(-rangesize, rangesize)
-    if(save):
-        fig.savefig(name)
-    else:
-        return ax
     
 
 def test(base_model, test_dataloader, ChamferDisL1, ChamferDisL2, args, config, logger = None):
