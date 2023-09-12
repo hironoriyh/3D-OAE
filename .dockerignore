@@ -1,0 +1,17 @@
+cfgs
+data
+datasets
+experiments
+figs
+models
+old_data
+pointnet2
+scripts
+tools
+utils
+*.yml
+*.py
+*.md
+*.ipynb
+*.sh
+*.png
