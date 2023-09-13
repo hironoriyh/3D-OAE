@@ -1,5 +1,42 @@
 # 3D-OAE: Occlusion Auto-Encoders for Self-Supervised Learning on Point Clouds
 
+with md0903 image (python3.9)  and  conda activate md
+
+<!-- #  Pointnet2 -->
+<!-- """
+cd ~/git/Pointnet2_PyTorch/pointnet2_ops_lib/  && python setup.py install --user 
+ln -s pointnet2_ops ~/git/3D-OAE/
+cd ~/git/3D-OAE/
+""" -->
+<!-- pip install "git+git://github.com/erikwijmans/Pointnet2_PyTorch.git#egg=pointnet2_ops&subdirectory=pointnet2_ops_lib" -->
+
+# install pc-skeletor
+"""
+pip install pc-skeletor
+"""
+
+# Poitnnet2 for point2skeleton and 3D-OAE 
+"""
+cd ~/git/3D-OAE
+ln -s ~/git/Point2Skeleton/src/pointnet2/ .
+cd pointnet2 &&  python setup.py build_ext --inplace
+
+"""
+
+
+#  chamfer_diff, emd
+"""
+<!-- replaced THC.h -->
+Replacing THC/THC.h module to ATen/ATen.h module
+THCudaCheck replaced with AT_CUDA_CHECK
+https://stackoverflow.com/questions/72988735/replacing-thc-thc-h-module-to-aten-aten-h-module
+
+"""
+
+# GPU kNN
+pip install --upgrade https://github.com/unlimblue/KNN_CUDA/releases/download/0.2/KNN_CUDA-0.2-py3-none-any.whl
+```
+
 Created by [Junsheng Zhou](https://junshengzhou.github.io/), [Xin Wen](https://scholar.google.com/citations?user=7gcGzs8AAAAJ&hl=zh-CN&oi=ao), [Baorui Ma](https://mabaorui.github.io/), [Yu-Shen Liu](https://yushen-liu.github.io/), [Yue Gao](https://www.gaoyue.org/), [Yi Fang](http://mmvc.engineering.nyu.edu/), [Zhizhong Han](https://h312h.github.io/)
 
 [[arXiv]](https://arxiv.org/pdf/2203.14084.pdf) [[Project Page]](https://junshengzhou.github.io/3D-OAE/) [[Models]](#pretrained-models)
@@ -49,13 +86,9 @@ pip install -r requirements.txt
 *NOTE:* PyTorch >= 1.7 and GCC >= 4.9 are required.
 
 ```
-# Chamfer Distance
-bash install.sh
-# PointNet++
-pip install "git+git://github.com/erikwijmans/Pointnet2_PyTorch.git#egg=pointnet2_ops&subdirectory=pointnet2_ops_lib"
-# GPU kNN
-pip install --upgrade https://github.com/unlimblue/KNN_CUDA/releases/download/0.2/KNN_CUDA-0.2-py3-none-any.whl
-```
+
+
+
 
 ### Dataset
 

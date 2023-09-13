@@ -357,16 +357,16 @@ def test_net(args, config):
 def scale_trans_and_divide(input_pcd):
     #center
     center = input_pcd.mean(axis=0)
-    input_pcd -= center
+    input_pcd_trans = input_pcd - center
 
-    scale = 1/(input_pcd.max(axis=0) - input_pcd.min(axis=0)).max()
-    input_pcd *= scale
+    scale = 1/(input_pcd_trans.max(axis=0) - input_pcd_trans.min(axis=0)).max()
+    input_pcd_trans = input_pcd * scale
     # input_mesh.apply_scale(scale)
     # center = input_mesh.centroid
     # input_mesh.apply_translation(-center)
     # input_pc = torch.tensor(input_mesh.vertices).cuda().float().unsqueeze(axis=0)
 
-    return input_pcd, center, scale
+    return input_pcd_trans, center, scale
 
 def retrans_rescale(input_pc, center, scale):
     input_pc += center
@@ -408,8 +408,8 @@ def export_imgs2(coarse_points, dense_points, centers, scaled_data, save_img_pat
     ax = fig.add_subplot(144, projection='3d')
     ax = vis_points(ax, dense_points[::10,:],  "dense_" + str(dense_points.shape[0]))
 
-    fig.savefig(os.path.join(save_img_path, "%i_.png"%idx))
-    print("saved in ", os.path.join(save_img_path, "%i_.png"%idx))
+    fig.savefig(save_img_path +  "_%i_.png"%idx)
+    print("saved in ", save_img_path +  "_%i_.png"%idx)
 
     return coarse_points, dense_points
 
@@ -431,59 +431,73 @@ def inference_net(args, config, data_path):
 
     # logger = get_logger(args.log_name)
     # print_log('inference start ... ', logger = logger)
-    data = np.load(data_path)
+
+    if(type(data_path) == str):
+        data = np.load(data_path)
+    else:
+        data = data_path # for taking numpy input directly
 
     base_model = builder.model_builder(config.model)
     builder.load_model(base_model, args.ckpts)
     base_model.to(0)
-
     base_model.eval()
-    if(args.skelnet):
+    
+    if(args.skelnet is not None):
         skel_net = SkelPointNet(config.model.num_group, input_channels=0, use_xyz=True)
         skel_net.to(0)
         skel_net.eval()
-        skelpath = "/home/hyoshida/git/Point2Skeleton/trainingrecon-weight128/weights-skelpoint.pth"
+        skelpath = args.skelnet #"/home/hyoshida/git/Point2Skeleton/trainingrecon-weight128/weights-skelpoint.pth"
         skel_net.load_state_dict(torch.load(skelpath))
+   
+    args.skelnet = True ### lazy solution
+    # args.pc_skeletor = True
 
     scaled_data, global_center, global_scale = scale_trans_and_divide(data)
     # scaled_data_torch = torch.tensor(scaled_data).float().cuda(0)
     # scaled_data_torch = scaled_data_torch.unsqueeze(0).reshape(num_group, -1, 3)
     groupsingle = "_group" if args.groups else "_single"
-    args.pc_skeletor = True
-    # import ipdb; ipdb.set_trace()
-    groupsingle += "_pcskeletor" # if args.pc_skeletor
-    save_path = os.path.join("experiments", data_path.split("/")[-1][:-4]+"_"+args.ckpts.split("/")[-2] + groupsingle)
-
-    os.makedirs(save_path, exist_ok=True)
+    # groupsingle += "_pcskeletor" # if args.pc_skeletor ### lazy solution
+    if(type(data_path) == str):
+        save_path = os.path.join("experiments", data_path.split("/")[-1][:-4]+"_"+args.ckpts.split("/")[-2] + groupsingle)
+        os.makedirs(save_path, exist_ok=True)
 
     if(args.groups is False):
         ### single input (128 center points)
-        with torch.no_grad():
 
-            ret = base_model(scaled_data[np.newaxis, :, :], return_center=True, pc_skeletor=True)
-            begin = 0
-            end = 1
-            coarse, dense = export_imgs2(ret[0], ret[1], ret[2], ret[3], save_img_path=save_path, idx=begin)
-            print("%i to %i saved in "%(begin, end), os.path.join(save_path, "%i_dense.off"%begin) )
+        ### pc_skeletor
+        # with torch.no_grad():
+        #     ret = base_model(scaled_data[np.newaxis, :, :], return_center=True, pc_skeletor=True)
+        #     begin = 0
+        #     end = 1
+        #     coarse, dense = export_imgs2(ret[0], ret[1], ret[2], ret[3], save_img_path=save_path, idx=begin)
+        #     print("%i to %i saved in "%(begin, end), os.path.join(save_path, "%i_dense.off"%begin) )
+        if args.pc_skeletor:
             exit()
         
         inpc = random_sample(scaled_data, 2048)
         inpc = torch.tensor(inpc).float().cuda(0).unsqueeze(0)
 
         with torch.no_grad():
-            begin=0
-            end=12
             if(args.skelnet):
                 ret = base_model(inpc, skelnet=skel_net, return_center=True)
             else:
                 ret = base_model(inpc, return_center=True)
-            coarse, dense = export_imgs2(ret[0], ret[1], ret[2], inpc, save_img_path=save_path, idx=begin)
-            # coarse = retrans_rescale(coarse, global_center, global_scale)
+            
+            if(type(data_path) == str):
+                coarse, dense = export_imgs2(ret[0], ret[1], ret[2], inpc, save_img_path=save_path, idx=0)
+            
+            coarse = ret[0].squeeze(0).to('cpu').detach().numpy().copy()
+            dense = ret[1].squeeze(0).to('cpu').detach().numpy().copy()
+            skel = ret[2].squeeze(0).to('cpu').detach().numpy().copy()
+            coarse = retrans_rescale(coarse, global_center, global_scale)
             # dense = retrans_rescale(dense, global_center, global_scale)
-            # save_off_points(data, os.path.join(save_path, "%i_input.off"%begin))
-            # save_off_points(coarse, os.path.join(save_path, "%i_coarse.off"%begin))
-            # save_off_points(dense, os.path.join(save_path, "%i_dense.off"%begin))
-            print("%i to %i saved in "%(begin, end), os.path.join(save_path, "%i_dense.off"%begin) )
+            skel = retrans_rescale(skel, global_center, global_scale)
+
+            import ipdb; ipdb.set_trace()
+
+            return np.array([coarse, skel]) # np.array([coarse, dense, skel])
+
+
    
     else:   ### group inputs
         group_size = 1024

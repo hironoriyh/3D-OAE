@@ -183,11 +183,13 @@ def seprate_point_cloud(xyz, num_points, crop, fixed_points = None, padding_zero
 
     return input_data.contiguous(), crop_data.contiguous()
 
-def get_ptcloud_img(ptcloud):
-    fig = plt.figure(figsize=(8, 8))
-
-    x, z, y = ptcloud.transpose(1, 0)
-    ax = fig.gca(projection=Axes3D.name, adjustable='box')
+def get_ptcloud_img(ptcloud, ax = None, savepath=None, size=0.1):
+    # ptcloud = ptcloud[0, :, :]
+# try:
+    fig = plt.figure(figsize=(10, 10))
+    # x, z, y = ptcloud.transpose(1, 0)
+    if(ax is None):
+        ax = fig.gca(projection=Axes3D.name, adjustable='box')
     ax.axis('off')
     # ax.axis('scaled')
     ax.view_init(30, 45)
@@ -195,12 +197,18 @@ def get_ptcloud_img(ptcloud):
     ax.set_xbound(min, max)
     ax.set_ybound(min, max)
     ax.set_zbound(min, max)
-    ax.scatter(x, y, z, zdir='z', c=x, cmap='jet')
+    ax.scatter3D(ptcloud[0,:,0],ptcloud[0,:,1], ptcloud[0,:,2], zdir='z', s=size, c=ptcloud[0,:,0], cmap='jet')
 
-    fig.canvas.draw()
-    img = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
-    img = img.reshape(fig.canvas.get_width_height()[::-1] + (3, ))
-    return img
+    # fig.canvas.draw()
+    # if(savepath):
+    #     fig.savefig(savepath)
+    #     print("saved", savepath)
+    # img = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
+    # img = img.reshape(fig.canvas.get_width_height()[::-1] + (3, ))
+    # except:
+    #     print("misc.py line 205 error for img", ptcloud.shape)
+    #     img = np.zeros((800,800, 3))
+    return ax
 
 
 

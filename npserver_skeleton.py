@@ -110,7 +110,7 @@ with NumpySocket() as s:
                 else:
                     print("none")
 
-                # conn.close()
+                conn.close()
 
     except: # KeyboardInterrupt:
         s.close()

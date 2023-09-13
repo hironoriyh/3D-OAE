@@ -43,6 +43,23 @@ def get_args():
         default=False, 
         help = 'test mode for certain ckpt')
     parser.add_argument(
+        '--inference',  type=str, default=None)
+    parser.add_argument(
+        '--skelnet', 
+        action='store_true', 
+        default=False, 
+        help = 'use skelnet for init center')
+    parser.add_argument(
+        '--pc_skeletor', 
+        action='store_true', 
+        default=False, 
+        help = 'use pc_skeletor for init center')
+    parser.add_argument(
+        '--groups', 
+        action='store_true', 
+        default=False, 
+        help = 'divide input points in groups')
+    parser.add_argument(
         '--finetune_model', 
         action='store_true', 
         default=False, 

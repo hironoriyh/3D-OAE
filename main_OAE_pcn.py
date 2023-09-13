@@ -1,11 +1,12 @@
 from tools import OAE_pcn_finetune_run_net as finetune
-from tools import OAE_pcn_finetune_test_net as test_net
+from tools import OAE_pcn_finetune_test_net as test_net, inference_net
 from utils import parser, dist_utils, misc
 from utils.logger import *
 from utils.config import *
 import time
 import os
 import torch
+
 from tensorboardX import SummaryWriter
 
 def main():
@@ -28,6 +29,7 @@ def main():
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
     log_file = os.path.join(args.experiment_path, f'{timestamp}.log')
     logger = get_root_logger(log_file=log_file, name=args.log_name)
+    logger.setLevel("WARNING")
     # define the tensorboard writer
     if not args.test:
         if args.local_rank == 0:
@@ -38,6 +40,7 @@ def main():
             val_writer = None
     # config
     config = get_config(args, logger = logger)
+    # import ipdb;ipdb.set_trace()
 
     # batch size
     if args.distributed:
@@ -71,6 +74,9 @@ def main():
     # run
     if args.test:
         test_net(args, config)
+    elif args.inference is not None:
+        # data = np.load(args.inference)
+        inference_net(args, config, args.inference)
     elif args.finetune_model or args.scratch_model:
         finetune(args, config, train_writer, val_writer)
     else:
