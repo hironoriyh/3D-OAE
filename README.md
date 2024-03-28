@@ -15,7 +15,7 @@ cd ~/git/3D-OAE/
 pip install pc-skeletor
 """
 
-# Poitnnet2 for point2skeleton and 3D-OAE 
+# Pointnet2 for point2skeleton and 3D-OAE 
 """
 cd ~/git/3D-OAE
 ln -s ~/git/Point2Skeleton/src/pointnet2/ .
@@ -37,9 +37,14 @@ https://stackoverflow.com/questions/72988735/replacing-thc-thc-h-module-to-aten-
 pip install --upgrade https://github.com/unlimblue/KNN_CUDA/releases/download/0.2/KNN_CUDA-0.2-py3-none-any.whl
 ```
 
+
+------------------------------
+
 Created by [Junsheng Zhou](https://junshengzhou.github.io/), [Xin Wen](https://scholar.google.com/citations?user=7gcGzs8AAAAJ&hl=zh-CN&oi=ao), [Baorui Ma](https://mabaorui.github.io/), [Yu-Shen Liu](https://yushen-liu.github.io/), [Yue Gao](https://www.gaoyue.org/), [Yi Fang](http://mmvc.engineering.nyu.edu/), [Zhizhong Han](https://h312h.github.io/)
 
 [[arXiv]](https://arxiv.org/pdf/2203.14084.pdf) [[Project Page]](https://junshengzhou.github.io/3D-OAE/) [[Models]](#pretrained-models)
+
+
 
 This repository contains official PyTorch implementation for __3D-OAE: Occlusion Auto-Encoders for Self-Supervised Learning on Point Clouds__.
 
