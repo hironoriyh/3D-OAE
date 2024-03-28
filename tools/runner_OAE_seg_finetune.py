@@ -10,7 +10,8 @@ from utils.AverageMeter import AverageMeter
 
 import numpy as np
 from datasets import data_transforms
-from pointnet2_ops import pointnet2_utils
+from pointnet2.utils import pointnet2_utils
+
 from torchvision import transforms
 from torch.utils.data import DataLoader
 

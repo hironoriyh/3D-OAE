@@ -18,7 +18,8 @@ from sklearn.svm import LinearSVC
 import numpy as np
 from torchvision import transforms
 from datasets import data_transforms
-from pointnet2_ops import pointnet2_utils
+from pointnet2.utils import pointnet2_utils
+
 # from torchstat import stat
 
 train_transforms = transforms.Compose(

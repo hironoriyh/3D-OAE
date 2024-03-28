@@ -1,6 +1,7 @@
 import torch
 from torch import nn
-from pointnet2_ops import pointnet2_utils
+from pointnet2.utils import pointnet2_utils
+
 from knn_cuda import KNN
 knn = KNN(k=16, transpose_mode=False)
 

@@ -15,8 +15,12 @@ import numpy as np
 import sys
 sys.path.append("..") # Adds higher directory to python modules path.
 from models.util_models import Group
-
 from models.SkelPointNet import SkelPointNet
+
+
+from tqdm import tqdm
+from collections import OrderedDict
+
 
 
 def run_net(args, config, train_writer=None, val_writer=None):
@@ -24,20 +28,8 @@ def run_net(args, config, train_writer=None, val_writer=None):
     # build dataset
     (train_sampler, train_dataloader), (_, test_dataloader) = builder.dataset_builder(args, config.dataset.train), \
                                                             builder.dataset_builder(args, config.dataset.val)
-
     # build model
-    base_model = builder.model_builder(config.model)
-    skel_net = SkelPointNet(config.model.num_group, input_channels=0, use_xyz=True)
-
-    if args.use_gpu:
-        base_model.to(args.local_rank)
-        skel_net.to(0)
-
-    # from IPython import embed; embed()
-    skel_net.eval()
-    skelpath = "/home/hyoshida/git/Point2Skeleton/trainingrecon-weight128/weights-skelpoint.pth"
-    ckpt = torch.load(skelpath)
-    skel_net.load_state_dict(ckpt)
+    base_model = builder.model_builder(config.model) #, skelnet = args.skel_net)
 
     # parameter setting
     start_epoch = 0
@@ -54,6 +46,14 @@ def run_net(args, config, train_writer=None, val_writer=None):
         else:
             print_log('Training from scratch', logger = logger)
 
+    if(args.skelnet_ckpt is not None): 
+        base_model.use_skelnet = True
+        base_model.skelnet = SkelPointNet(config.model.num_group, input_channels=0, use_xyz=True)
+        # skelpath = config.skelnet_ckpt
+        base_model.skelnet.load_state_dict(torch.load(args.skelnet_ckpt))
+        base_model.skelnet.to(0)
+        base_model.skelnet.eval()
+
     # DDP
     if args.distributed:
         # Sync BN
@@ -65,6 +65,7 @@ def run_net(args, config, train_writer=None, val_writer=None):
     else:
         print_log('Using Data parallel ...' , logger = logger)
         base_model = nn.DataParallel(base_model).cuda()
+
     # optimizer & scheduler
     optimizer, scheduler = builder.build_opti_sche(base_model, config)
     
@@ -76,8 +77,7 @@ def run_net(args, config, train_writer=None, val_writer=None):
     if args.resume:
         builder.resume_optimizer(optimizer, args, logger = logger)
 
-    # import ipdb;ipdb.set_trace()
-    metrics = validate(base_model, test_dataloader, 1, ChamferDisL1, ChamferDisL2, val_writer, args, config, logger=logger)
+    # metrics = validate(base_model, test_dataloader, 1, ChamferDisL1, ChamferDisL2, val_writer, args, config, logger=logger)
 
     # trainval
     # training
@@ -97,68 +97,71 @@ def run_net(args, config, train_writer=None, val_writer=None):
 
         base_model.train()  # set model to training mode
         n_batches = len(train_dataloader)
-        for idx, (taxonomy_ids, model_ids, data) in enumerate(train_dataloader):
-            data_time.update(time.time() - batch_start_time)
-            npoints = config.dataset.train._base_.N_POINTS
-            dataset_name = config.dataset.train._base_.NAME
-            if dataset_name == 'PCN':
-                partial = data[0].cuda()
-                gt = data[1].cuda()
-                if config.dataset.train._base_.CARS:
-                    if idx == 0:
-                        print_log('padding while KITTI training', logger=logger)
-                    partial = misc.random_dropping(partial, epoch) # specially for KITTI finetune
+        with tqdm(train_dataloader) as pbar:
+            pbar.set_description("epoch {}".format(epoch) )
+                                 
+            for idx, (taxonomy_ids, model_ids, data) in enumerate(pbar):
+                data_time.update(time.time() - batch_start_time)
+                npoints = config.dataset.train._base_.N_POINTS
+                dataset_name = config.dataset.train._base_.NAME
+                if dataset_name == 'PCN':
+                    partial = data[0].cuda()
+                    gt = data[1].cuda()
+                    if config.dataset.train._base_.CARS:
+                        if idx == 0:
+                            print_log('padding while KITTI training', logger=logger)
+                        partial = misc.random_dropping(partial, epoch) # specially for KITTI finetune
 
-            elif dataset_name == 'ShapeNet':
-                gt = data.cuda()
-                partial, _ = misc.seprate_point_cloud(gt, npoints, [int(npoints * 1/4) , int(npoints * 3/4)], fixed_points = None)
-                partial = partial.cuda()
-            else:
-                raise NotImplementedError(f'Train phase do not support {dataset_name}')
+                elif dataset_name == 'ShapeNet':
+                    gt = data.cuda()
+                    partial, _ = misc.seprate_point_cloud(gt, npoints, [int(npoints * 1/4) , int(npoints * 3/4)], fixed_points = None)
+                    partial = partial.cuda()
+                else:
+                    raise NotImplementedError(f'Train phase do not support {dataset_name}')
 
-            num_iter += 1
-           
-            if(skel_net is not None) :
+                num_iter += 1
                 ret = base_model(partial)
-            else:
-                 ret = base_model(partial, skelnet=skel_net)
+                
+                sparse_loss, dense_loss = base_model.module.get_loss(ret, gt)
             
-            sparse_loss, dense_loss = base_model.module.get_loss(ret, gt)
-         
-            _loss = sparse_loss + dense_loss 
-            _loss.backward()
-            if config.clip_gradients:
-                norm = builder.clip_gradients(base_model, config.clip_grad)
+                _loss = sparse_loss + dense_loss 
+                pbar.set_postfix(OrderedDict(loss=_loss.detach().cpu().numpy()))
+                # tqdm.write("epoch {}, iter: {}, loss {:.4f}".format(epoch, idx, _loss.detach().cpu().numpy()))
+                
+                _loss.backward()
+                if config.clip_gradients:
+                    norm = builder.clip_gradients(base_model, config.clip_grad)
 
-            # forward
-            if num_iter == config.step_per_update:
-                num_iter = 0
-                optimizer.step()
-                base_model.zero_grad()
+                # forward
+                if num_iter == config.step_per_update:
+                    num_iter = 0
+                    optimizer.step()
+                    base_model.zero_grad()
 
-            if args.distributed:
-                sparse_loss = dist_utils.reduce_tensor(sparse_loss, args)
-                dense_loss = dist_utils.reduce_tensor(dense_loss, args)
-                losses.update([sparse_loss.item() * 1000, dense_loss.item() * 1000])
-            else:
-                losses.update([sparse_loss.item() * 1000, dense_loss.item() * 1000])
+                if args.distributed:
+                    sparse_loss = dist_utils.reduce_tensor(sparse_loss, args)
+                    dense_loss = dist_utils.reduce_tensor(dense_loss, args)
+                    losses.update([sparse_loss.item() * 1000, dense_loss.item() * 1000])
+                else:
+                    losses.update([sparse_loss.item() * 1000, dense_loss.item() * 1000])
 
 
-            if args.distributed:
-                torch.cuda.synchronize()
+                if args.distributed:
+                    torch.cuda.synchronize()
 
-            n_itr = epoch * n_batches + idx
-            if train_writer is not None:
-                train_writer.add_scalar('Loss/Batch/Sparse', sparse_loss.item() * 1000, n_itr)
-                train_writer.add_scalar('Loss/Batch/Dense', dense_loss.item() * 1000, n_itr)
+                n_itr = epoch * n_batches + idx
+                if train_writer is not None:
+                    train_writer.add_scalar('Loss/Batch/Sparse', sparse_loss.item() * 1000, n_itr)
+                    train_writer.add_scalar('Loss/Batch/Dense', dense_loss.item() * 1000, n_itr)
 
-            batch_time.update(time.time() - batch_start_time)
-            batch_start_time = time.time()
+                batch_time.update(time.time() - batch_start_time)
+                batch_start_time = time.time()
 
-            if idx % 100 == 0:
-                print_log('[Epoch %d/%d][Batch %d/%d] BatchTime = %.3f (s) DataTime = %.3f (s) Losses = %s lr = %.6f' %
-                            (epoch, config.max_epoch, idx + 1, n_batches, batch_time.val(), data_time.val(),
-                            ['%.4f' % l for l in losses.val()], optimizer.param_groups[0]['lr']), logger = logger)
+                if idx % 100 == 0:
+                    print_log('[Epoch %d/%d][Batch %d/%d] BatchTime = %.3f (s) DataTime = %.3f (s) Losses = %s lr = %.6f' %
+                                (epoch, config.max_epoch, idx + 1, n_batches, batch_time.val(), data_time.val(),
+                                ['%.4f' % l for l in losses.val()], optimizer.param_groups[0]['lr']), logger = logger)
+        
         if isinstance(scheduler, list):
             for item in scheduler:
                 item.step(epoch)
@@ -183,8 +186,9 @@ def run_net(args, config, train_writer=None, val_writer=None):
                 best_metrics = metrics
                 builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics, 'ckpt-best', args, logger = logger)
         builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics, 'ckpt-last', args, logger = logger)      
-        if (config.max_epoch - epoch) < 10 or epoch%10 == 0:
+        if (config.max_epoch - epoch) < 10 or epoch%30 == 0:
             builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics, f'ckpt-epoch-{epoch:03d}', args, logger = logger)     
+    
     train_writer.close()
     val_writer.close()
 
@@ -252,7 +256,6 @@ def validate(base_model, test_dataloader, epoch, ChamferDisL1, ChamferDisL2, val
             else:
                 raise NotImplementedError(f'Train phase do not support {dataset_name}')
 
-            # import ipdb; ipdb.set_trace()
             ret = base_model(partial)
             coarse_points = ret[0]
             dense_points = ret[1]
@@ -269,8 +272,8 @@ def validate(base_model, test_dataloader, epoch, ChamferDisL1, ChamferDisL2, val
                 dense_loss_l2 = dist_utils.reduce_tensor(dense_loss_l2, args)
 
             test_losses.update([sparse_loss_l1.item() * 1000, sparse_loss_l2.item() * 1000, dense_loss_l1.item() * 1000, dense_loss_l2.item() * 1000])
-
-            _metrics = Metrics.get(dense_points, gt)
+            # import ipdb; ipdb.set_trace()
+            _metrics = Metrics.get(dense_points, gt) # takes time here
 
             if taxonomy_id not in category_metrics:
                 category_metrics[taxonomy_id] = AverageMeter(Metrics.names())
@@ -365,13 +368,12 @@ def scale_trans_and_divide(input_pcd):
     # center = input_mesh.centroid
     # input_mesh.apply_translation(-center)
     # input_pc = torch.tensor(input_mesh.vertices).cuda().float().unsqueeze(axis=0)
-
     return input_pcd_trans, center, scale
 
-def retrans_rescale(input_pc, center, scale):
-    input_pc += center
-    input_pc *= 1/scale
-    return input_pc
+def retrans_rescale(input_pcd, center, scale):
+    input_pcd *= 1/scale
+    input_pcd += center
+    return input_pcd
 
 def vis_points(ax, pcd, title, rangesize=1, ptsize=0.5):
     ax.scatter3D (pcd[:, 0],pcd[:, 1],pcd[:, 2], s=ptsize, zdir='y')
@@ -429,30 +431,38 @@ def random_sample(pc, num):
 
 def inference_net(args, config, data_path):
 
-    # logger = get_logger(args.log_name)
-    # print_log('inference start ... ', logger = logger)
-
+    logger = get_logger(args.log_name)
+    print_log('inference start ... ', logger = logger)
+# 
     if(type(data_path) == str):
         data = np.load(data_path)
     else:
         data = data_path # for taking numpy input directly
 
+    # if args.skelnet_ckpt is not None:
+    #     config.model.use_skelnet = True
+    #     config.model.skelnet_ckpt = args.skelnet_ckpt
+# 
     base_model = builder.model_builder(config.model)
+
     builder.load_model(base_model, args.ckpts)
+    # base_model.base_model.load_model_ckpt(args.ckpts)
     base_model.to(0)
     base_model.eval()
-    
-    if(args.skelnet is not None):
-        skel_net = SkelPointNet(config.model.num_group, input_channels=0, use_xyz=True)
-        skel_net.to(0)
-        skel_net.eval()
-        skelpath = args.skelnet #"/home/hyoshida/git/Point2Skeleton/trainingrecon-weight128/weights-skelpoint.pth"
-        skel_net.load_state_dict(torch.load(skelpath))
-   
-    args.skelnet = True ### lazy solution
-    # args.pc_skeletor = True
 
+    # device_1 = torch.device("cuda:0")
+
+    if(args.skelnet_ckpt is not None): 
+        base_model.use_skelnet = True
+        base_model.skelnet = SkelPointNet(config.model.num_group, input_channels=0, use_xyz=True)
+        # skelpath = config.skelnet_ckpt
+        base_model.skelnet.load_state_dict(torch.load(args.skelnet_ckpt))
+        base_model.skelnet.to(0)
+        base_model.skelnet.eval()
+        
+    
     scaled_data, global_center, global_scale = scale_trans_and_divide(data)
+    print("center:", global_center, "scale:", 1/global_scale)
     # scaled_data_torch = torch.tensor(scaled_data).float().cuda(0)
     # scaled_data_torch = scaled_data_torch.unsqueeze(0).reshape(num_group, -1, 3)
     groupsingle = "_group" if args.groups else "_single"
@@ -463,40 +473,28 @@ def inference_net(args, config, data_path):
 
     if(args.groups is False):
         ### single input (128 center points)
-
-        ### pc_skeletor
-        # with torch.no_grad():
-        #     ret = base_model(scaled_data[np.newaxis, :, :], return_center=True, pc_skeletor=True)
-        #     begin = 0
-        #     end = 1
-        #     coarse, dense = export_imgs2(ret[0], ret[1], ret[2], ret[3], save_img_path=save_path, idx=begin)
-        #     print("%i to %i saved in "%(begin, end), os.path.join(save_path, "%i_dense.off"%begin) )
-        if args.pc_skeletor:
-            exit()
-        
         inpc = random_sample(scaled_data, 2048)
         inpc = torch.tensor(inpc).float().cuda(0).unsqueeze(0)
 
         with torch.no_grad():
-            if(args.skelnet):
-                ret = base_model(inpc, skelnet=skel_net, return_center=True)
-            else:
-                ret = base_model(inpc, return_center=True)
+
+            ret = base_model(inpc, return_center=True)
             
             if(type(data_path) == str):
                 coarse, dense = export_imgs2(ret[0], ret[1], ret[2], inpc, save_img_path=save_path, idx=0)
             
             coarse = ret[0].squeeze(0).to('cpu').detach().numpy().copy()
-            dense = ret[1].squeeze(0).to('cpu').detach().numpy().copy()
-            skel = ret[2].squeeze(0).to('cpu').detach().numpy().copy()
             coarse = retrans_rescale(coarse, global_center, global_scale)
-            # dense = retrans_rescale(dense, global_center, global_scale)
-            skel = retrans_rescale(skel, global_center, global_scale)
+            dense = ret[1].squeeze(0).to('cpu').detach().numpy().copy()
+            dense = retrans_rescale(dense, global_center, global_scale)
 
-            import ipdb; ipdb.set_trace()
+            if(config.model.use_skelnet):
+                skel = ret[2].squeeze(0).to('cpu').detach().numpy().copy()
+                skel = retrans_rescale(skel, global_center, global_scale)
+                return np.array([coarse, dense, skel]) # np.array([coarse, dense, skel])
 
-            return np.array([coarse, skel]) # np.array([coarse, dense, skel])
-
+            else:
+                return np.array([coarse, dense]) 
 
    
     else:   ### group inputs
@@ -548,11 +546,6 @@ def inference_net(args, config, data_path):
         #         save_off_points(coarse, os.path.join(save_path, "%i_coarse.off"%idx))
         #         save_off_points(dense, os.path.join(save_path, "%i_dense.off"%idx))
         #         print("%i to %i saved in "%(idx, idx), os.path.join(save_path, "%i_dense.off"%idx) )
-            
-
-
-
-    ###
 
 
     

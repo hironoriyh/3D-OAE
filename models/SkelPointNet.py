@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import numpy as np
 from pointnet2.utils.pointnet2_modules import PointnetSAModuleMSG
-# from pointnet2_ops.pointnet2_modules import PointnetSAModuleMSG
 
 import torch.nn.functional as F
 import copy
@@ -219,9 +218,9 @@ class SkelPointNet(nn.Module):
         features = pc[..., 3:].transpose(1, 2).contiguous() if pc.size(-1) > 3 else None
         return xyz, features
 
-    def forward(self, input_pc, compute_graph=False, recon=False, group=False):
-
-        input_pc = input_pc.cuda()
+    def forward(self, input_pc, compute_graph=False, recon=False, group=False, device=0):
+        # import ipdb; ipdb.set_trace()
+        # input_pc = input_pc.cuda(device)
         xyz, features = self.split_point_feature(input_pc)
 
         # obtain the sampled points and contextural features
@@ -250,7 +249,7 @@ class SkelPointNet(nn.Module):
             if group: ## used for point-oae
                 bs = input_pc.shape[0]
                 # num_group = int(scaled_data.shape[0]/group_size)
-                knn = KNN(k=2048, transpose_mode=True).float().cuda(0) # 2048 for Point_tr input
+                knn = KNN(k=2048, transpose_mode=True).float().cuda(device) # 2048 for Point_tr input
                 # skel xyz and neibouring
                 # center, _, _  = skelnet(inpc)
                 _, idx = knn(input_pc, skel_xyz) # B G M

@@ -1,8 +1,7 @@
 import torch
 from torch import nn
-
 # import ipdb; ipdb.set_trace()
-# from pointnet2_ops import pointnet2_utils
+
 from pointnet2.utils import pointnet2_utils
 from extensions.chamfer_dist import ChamferDistanceL1
 from utils.logger import print_log
@@ -10,6 +9,7 @@ from models.PoinTr_utils.PoinTr_ST import PCTransformer
 from .build import MODELS
 from utils.checkpoint import *
 
+from models.SkelPointNet import SkelPointNet
 
 
 def fps(pc, num):
@@ -70,10 +70,20 @@ class OAE_PoinTr(nn.Module):
         self.knn_layer = config.knn_layer
         self.num_pred = config.num_pred
         self.num_query = config.num_query
+        self.use_skelnet = False
+        self.skelnet = None
 
         self.fold_step = int(pow(self.num_pred//self.num_query, 0.5) + 0.5)
         self.base_model = PCTransformer(config = config, in_chans = 3, embed_dim = self.trans_dim, depth = [12, 8], drop_rate = 0., num_query = self.num_query, knn_layer = self.knn_layer)
-        
+        # import ipdb;ipdb.set_trace()
+
+        # if(config.use_skelnet): 
+        #     self.use_skelnet = True
+        #     self.skelnet = SkelPointNet(config.num_group, input_channels=0, use_xyz=True)
+        #     skelpath = config.skelnet_ckpt
+        #     self.skelnet.load_state_dict(torch.load(skelpath))
+        #     self.skelnet.eval() 
+
         self.foldingnet = Fold(self.trans_dim, step = self.fold_step, hidden_dim = 256)  # rebuild a cluster point
 
         self.increase_dim = nn.Sequential(
@@ -93,12 +103,18 @@ class OAE_PoinTr(nn.Module):
         loss_fine = self.loss_func(ret[1], gt)
         return loss_coarse, loss_fine
 
-    def forward(self, xyz, skelnet=None, return_center=False, pc_skeletor=False):
+    def forward(self, xyz, return_center=False, pc_skeletor=False):
         
-        if pc_skeletor:
-            q, coarse_point_cloud, center, xyz = self.base_model(xyz, skelnet=skelnet, return_center=True, pc_skeletor=pc_skeletor) # B M C and B M 3
-        else:
-            q, coarse_point_cloud, center = self.base_model(xyz, skelnet=skelnet, return_center=True, pc_skeletor=pc_skeletor) # B M C and B M 3
+        if self.use_skelnet is True: 
+            # print("skelnet is used")
+            q, coarse_point_cloud, center = self.base_model(xyz, skelnet=self.skelnet , return_center=True) # B M C and B M 3
+        elif pc_skeletor: # not used
+            # print("pc_skeletor is used")
+            q, coarse_point_cloud, center, xyz = self.base_model(xyz, return_center=True, pc_skeletor=pc_skeletor) # B M C and B M 3
+        else: # normal
+            # print("normal")
+            q, coarse_point_cloud, center = self.base_model(xyz) # B M C and B M 3
+            
         B, M ,C = q.shape
 
         global_feature = self.increase_dim(q.transpose(1,2)).transpose(1,2) # B M 1024
@@ -122,15 +138,22 @@ class OAE_PoinTr(nn.Module):
         coarse_point_cloud = torch.cat([coarse_point_cloud, inp_sparse], dim=1).contiguous()
         rebuild_points = torch.cat([rebuild_points, xyz],dim=1).contiguous()
 
-        
-        if return_center: # skeleton
-            if pc_skeletor: 
-                ret = (coarse_point_cloud, rebuild_points, center, xyz)
-            else: # skelnet
-                ret = (coarse_point_cloud, rebuild_points, center)
-
-        else: # normal
-            ret = (coarse_point_cloud, rebuild_points)
-
+        if pc_skeletor: 
+            ret = (coarse_point_cloud, rebuild_points, center, xyz) 
+        # elif(self.use_skelnet):
+        #     ret = (coarse_point_cloud, rebuild_points, center)
+        else: ### normal
+            ret = (coarse_point_cloud, rebuild_points, center)
         return ret
+    
+        # if return_center: # 
+        #     if self.use_skelnet:
+        #         ret = (coarse_point_cloud, rebuild_points, center)
+        #     elif pc_skeletor: 
+        #         ret = (coarse_point_cloud, rebuild_points, center, xyz) # xyz is for what?
+            
+        # else: # normal
+        #     ret = (coarse_point_cloud, rebuild_points)
+
+        # return ret
 

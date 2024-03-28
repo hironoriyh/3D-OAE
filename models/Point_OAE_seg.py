@@ -7,7 +7,8 @@ from utils.checkpoint import get_missing_parameters_message, get_unexpected_para
 from .build import MODELS
 from models.util_models import PointNetFeaturePropagation, Group, Encoder
 
-from pointnet2_ops import pointnet2_utils
+from pointnet2.utils import pointnet2_utils
+
 from knn_cuda import KNN
 
 def fps(data, number):

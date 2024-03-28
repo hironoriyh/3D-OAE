@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from timm.models.layers import DropPath,trunc_normal_
-from models.SkelPointNet import SkelPointNet
+# from models.SkelPointNet import SkelPointNet
 
 from .dgcnn_group import DGCNN_Grouper
 from utils.logger import *
@@ -411,13 +411,17 @@ class PCTransformer(nn.Module):
         bs = inpc.shape[0] #size(0)
 
         # divide the point cloud in the same form. This is important
-        if skelnet is None and pc_skeletor is False:
-            neighborhood, center = self.group_divider(inpc)
-        elif pc_skeletor is True:
+        if skelnet is not None: #skelnet 
+            # import ipdb;ipdb.set_trace()
+            # inpc1 = inpc.to(torch.device("cuda:1"))
+            # center, _, _, neighborhood = skelnet(inpc1, group=True, device=torch.device("cuda:1")) 
+            center, _, _, neighborhood = skelnet(inpc, group=True, device=0) 
+
+                       
+        elif pc_skeletor is True: # just inference as comparison to skelnet
             center, neighborhood, inpc = self.pcskel_neighbor(inpc.squeeze(0))
-        else:
-            # skel xyz and neibouring
-            center, _, _, neighborhood = skelnet(inpc, group=True)
+        else: # normal version
+            neighborhood, center = self.group_divider(inpc)
         
         # encoder the input cloud blocks
         group_input_tokens = self.encoder(neighborhood)  #  B G N
@@ -450,11 +454,11 @@ class PCTransformer(nn.Module):
             else:
                 q = blk(q, x)
                 
-        if return_center:
-            if pc_skeletor:
-                return q, coarse_point_cloud, center, inpc
-            else: # skelnet
+        # if return_center:
+        if pc_skeletor:
+            return q, coarse_point_cloud, center, inpc
+        else: # skelnet or normal
                 return q, coarse_point_cloud, center
             
-        else: # normal without skelnet nor pc_skeletor
-            return q, coarse_point_cloud
+        # else: # normal without skelnet nor pc_skeletor
+        #     return q, coarse_point_cloud, center

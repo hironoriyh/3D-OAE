@@ -294,10 +294,11 @@ class Point_OAE(nn.Module):
 
             return x
             
-    def forward(self, pts, noaug=False, cutmix=False):
+    def forward(self, pts, noaug=False, cutmix=False, skelnet=None):
         if noaug:
             return self.forward_eval(pts)
-            
+        import ipdb; ipdb.set_trace()
+        # q, coarse_point_cloud, center = self.base_model(xyz, skelnet=skelnet, return_center=True, pc_skeletor=None) # B M C and B M 3
         # divide the point clo  ud in the same form. This is important
         neighborhood, center = self.group_divider(pts)
         

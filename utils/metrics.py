@@ -7,6 +7,7 @@
 
 import logging
 import open3d
+import time
 
 from extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
 
@@ -36,12 +37,15 @@ class Metrics(object):
 
     @classmethod
     def get(cls, pred, gt):
+        start = time.time()
         _items = cls.items()
         _values = [0] * len(_items)
         for i, item in enumerate(_items):
             eval_func = eval(item['eval_func'])
             _values[i] = eval_func(pred, gt)
-
+        end = time.time()
+        print("Metric get", end-start)
+        
         return _values
 
     @classmethod

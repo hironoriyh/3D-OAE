@@ -40,7 +40,10 @@ def main():
             val_writer = None
     # config
     config = get_config(args, logger = logger)
-    # import ipdb;ipdb.set_trace()
+    # if(args.use_skelnet):
+    #     config["model"]["use_skelnet"]=True
+    # else:
+    #     config["model"]["use_skelnet"]=False
 
     # batch size
     if args.distributed:
@@ -71,6 +74,10 @@ def main():
     if args.distributed:
         assert args.local_rank == torch.distributed.get_rank() 
         
+    if args.skelnet_ckpt is not None:
+        config.model.use_skelnet = True
+    else: 
+        config.model.use_skelnet = False
     # run
     if args.test:
         test_net(args, config)

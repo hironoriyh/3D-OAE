@@ -42,18 +42,21 @@ def get_args():
         action='store_true', 
         default=False, 
         help = 'test mode for certain ckpt')
+    
     parser.add_argument(
         '--inference',  type=str, default=None)
-    parser.add_argument(
-        '--skelnet', 
-        action='store_true', 
-        default=False, 
-        help = 'use skelnet for init center')
+    parser.add_argument('--skelnet_ckpt', type = str, default=None, help = 'reload used ckpt path')
+
     parser.add_argument(
         '--pc_skeletor', 
         action='store_true', 
         default=False, 
         help = 'use pc_skeletor for init center')
+    # parser.add_argument(
+    #     '--use_skelnet', 
+    #     action='store_true', 
+    #     default=False, 
+    #     help = 'use pc_skeletor for init center')
     parser.add_argument(
         '--groups', 
         action='store_true', 

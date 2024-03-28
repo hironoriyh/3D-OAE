@@ -4,7 +4,8 @@ import torch.nn.functional as F
 from time import time
 import numpy as np
 from knn_cuda import KNN
-from pointnet2_ops import pointnet2_utils
+from pointnet2.utils import pointnet2_utils
+
 from .build import MODELS
 from utils import misc
 from extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2

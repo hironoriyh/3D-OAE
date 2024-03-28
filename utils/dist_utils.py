@@ -17,9 +17,11 @@ def init_dist(launcher, backend='nccl', **kwargs):
 
 def _init_dist_pytorch(backend, **kwargs):
     # TODO: use local_rank instead of rank % num_gpus
+    # import ipdb;ipdb.set_trace()
     rank = int(os.environ['RANK'])
     num_gpus = torch.cuda.device_count()
-    torch.cuda.set_device(rank % num_gpus)
+    torch.cuda.set_device(int(rank % num_gpus))
+    # torch.cuda.set_device(3)
     dist.init_process_group(backend=backend, **kwargs)
     print(f'init distributed in rank {torch.distributed.get_rank()}')
 
