@@ -2,6 +2,8 @@ version: "3"
 services:
   app:
     build: . 
+
+    shm_size: '2gb'
     image: 3doae:0903
     #image: nvcr.io/nvidia/pytorch:21.06-py3
     command: /bin/bash
@@ -9,11 +11,12 @@ services:
     user: ${CURRENT_UID}
     volumes:
       - /home/hyoshida:/home/hyoshida
+      - /mnt/hdd2/datasets/:/home/hyoshida/datasets
       - /etc/passwd:/etc/passwd      
       - /etc/group:/etc/group
-     #ports:
-     # - "6007:6007"
-     # - "8899:8899"
+     ports:
+     - "6007:6007"
+     - "8899:8899"
     tty: true
     working_dir: $HOME
     #command: tail -f /dev/null
