@@ -304,7 +304,7 @@ def scale_trans_and_divide(input_pcd):
         print("normalizing input point cloud")
         center = input_pcd.mean(axis=0)
         input_pcd_trans = input_pcd - center
-        scale = 2*0.95/(input_pcd_trans.max(axis=0) - input_pcd_trans.min(axis=0)).max()
+        scale = 1.2*0.95/(input_pcd_trans.max(axis=0) - input_pcd_trans.min(axis=0)).max()
         input_pcd_trans = input_pcd_trans * scale
     else:
         scale = 1
