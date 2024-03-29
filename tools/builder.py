@@ -148,8 +148,15 @@ def resume_optimizer(optimizer, args, logger = None):
 
 def save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics, prefix, args, logger = None):
     if args.local_rank == 0:
+        state_dict = {}
+        for k, v in base_model.state_dict().items():
+            if k.find("skelnet") is -1: 
+                state_dict[k] = v
+            else:
+                print("skelnet skipping")
+                continue
         torch.save({
-                    'base_model' : base_model.module.state_dict() if args.distributed else base_model.state_dict(),
+                    'base_model' : state_dict if args.distributed else base_model.state_dict(),
                     'optimizer' : optimizer.state_dict(),
                     'epoch' : epoch,
                     'metrics' : metrics.state_dict() if metrics is not None else dict(),
@@ -169,8 +176,19 @@ def load_model(base_model, ckpt_path, logger = None):
         base_ckpt = {k.replace("module.", ""): v for k, v in state_dict['model'].items()}
     elif state_dict.get('base_model') is not None:
         base_ckpt = {k.replace("module.", ""): v for k, v in state_dict['base_model'].items()}
+        base_ckpt = {}
+        for k, v in state_dict['base_model'].items():
+            if k.find("skelnet") is -1: 
+                base_ckpt[k] = v
+            else:
+                print("skelnet skipping")
+                continue
+        base_ckpt = {k.replace("module.", ""): v for k, v in base_ckpt.items()}
+        # model_state_dict = base_model.state_dict()
+        # filtered_state_dict = {k: v for k, v in base_ckpt.items() if k in model_state_dict and model_state_dict[k].size() == v.size()}                                                                                                           
     else:
         raise RuntimeError('mismatch of ckpt weight')
+    
     base_model.load_state_dict(base_ckpt, strict = True)
 
     epoch = -1
