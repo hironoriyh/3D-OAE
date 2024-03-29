@@ -1,5 +1,7 @@
 from tools import OAE_pcn_finetune_run_net as finetune
-from tools import OAE_pcn_finetune_test_net as test_net, inference_net
+from tools import OAE_pcn_finetune_test_net as test_net
+from tools import OAE_pcn_finetune_inference_net as inference_net
+
 from utils import parser, dist_utils, misc
 from utils.logger import *
 from utils.config import *

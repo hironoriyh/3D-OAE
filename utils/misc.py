@@ -254,3 +254,123 @@ def random_dropping(pc, e):
 def random_scale(partial, scale_range=[0.8, 1.2]):
     scale = torch.rand(1).cuda() * (scale_range[1] - scale_range[0]) + scale_range[0]
     return partial * scale
+
+
+
+def export_imgs(partial, coarse_points, dense_points, gt, val_writer=None, idx=0, epoch=0, save_img_path=None):
+    # import ipdb; ipdb.set_trace()
+    fig = plt.figure()
+    fig.set_size_inches(40, 10)
+    input_pc = partial.squeeze().detach().cpu().numpy()
+    # ax = fig.add_subplot(121, projection='3d')
+    ax = fig.add_subplot(141, projection='3d')
+    misc.get_ptcloud_img(input_pc, ax, savepath=os.path.join(save_img_path, "%i_input.png"%idx), size=1)
+    
+    ax = fig.add_subplot(142, projection='3d')
+    sparse = coarse_points.squeeze().cpu().numpy()
+    sparse_img = misc.get_ptcloud_img(sparse, ax, savepath=os.path.join(save_img_path, "%i_sparse.png"%idx), size=4)
+
+    ax = fig.add_subplot(143, projection='3d')
+    dense = dense_points.squeeze().cpu().numpy()
+    dense_img = misc.get_ptcloud_img(dense, ax, savepath=os.path.join(save_img_path, "%i_dense.png"%idx))
+    
+    ax = fig.add_subplot(144, projection='3d')
+    gt_ptcloud = gt.squeeze().cpu().numpy()
+    gt_ptcloud_img = misc.get_ptcloud_img(gt_ptcloud, ax, savepath=os.path.join(save_img_path, "%i_gt.png"%idx))
+    
+    fig.savefig(os.path.join(save_img_path, "%i_.png"%idx))
+
+
+    if(val_writer):
+        val_writer.add_image('Model%02d/Input'% idx , input_pc, epoch, dataformats='HWC')
+        val_writer.add_image('Model%02d/Sparse' % idx, sparse_img, epoch, dataformats='HWC')
+        val_writer.add_image('Model%02d/Dense' % idx, dense_img, epoch, dataformats='HWC')
+        val_writer.add_image('Model%02d/DenseGT' % idx, gt_ptcloud_img, epoch, dataformats='HWC')
+
+    
+
+crop_ratio = {
+    'easy': 1/4,
+    'median' :1/2,
+    'hard':3/4
+}
+
+def scale_trans_and_divide(input_pcd):
+
+    if(((input_pcd.max(axis=0)-input_pcd.min(axis=0)).max() > 2) 
+       or ((input_pcd.max(axis=0)-input_pcd.min(axis=0)).max() < 1.0)
+       or (input_pcd.mean() > 0.5 )
+       or (input_pcd.mean() < -0.5) ):
+        print("normalizing input point cloud")
+        center = input_pcd.mean(axis=0)
+        input_pcd_trans = input_pcd - center
+        scale = 2*0.95/(input_pcd_trans.max(axis=0) - input_pcd_trans.min(axis=0)).max()
+        input_pcd_trans = input_pcd_trans * scale
+    else:
+        scale = 1
+        center = [0,0,0]
+        input_pcd_trans = input_pcd
+
+    # if(input_pcd.mean() > 0.5 or input_pcd.mean() <0.5):
+
+    return input_pcd_trans, center, scale
+
+def retrans_rescale(input_pcd, center, scale):
+    input_pcd *= 1/scale
+    input_pcd += center
+
+    return input_pcd
+
+def vis_points(ax, pcd, title, rangesize=1, ptsize=0.5):
+    ax.scatter3D (pcd[:, 0],pcd[:, 1],pcd[:, 2], s=ptsize, zdir='y')
+#     ax.axis("off")
+    ax.set_title(title)
+    ax.set_xlim(-rangesize, rangesize)
+    ax.set_ylim(-rangesize, rangesize)
+    ax.set_zlim(-rangesize, rangesize)
+    return ax
+
+def export_imgs2(coarse_points, dense_points, centers, scaled_data, save_img_path= "experiments", idx=0):
+
+    # coarse_points = coarse_points + centers.expand(-1, coarse_points.shape[1], -1)
+    # dense_points = dense_points + centers.expand(-1, dense_points.shape[1], -1)
+    # centers_model = centers_model + centers.expand(-1, centers_model.shape[1], -1)
+
+    scaled_data = scaled_data.cpu().numpy().reshape(-1,3)
+    centers = centers.cpu().numpy().reshape(-1,3)
+    coarse_points = coarse_points.cpu().numpy().reshape(-1,3)
+    dense_points = dense_points.cpu().numpy().reshape(-1,3)
+
+
+    fig = plt.figure()
+    fig.set_size_inches(40, 10)
+    ax = fig.add_subplot(141, projection='3d')
+    ax = vis_points(ax, scaled_data,  "input_" + str(scaled_data.shape[0]))
+
+    ax = fig.add_subplot(142, projection='3d')
+    ax = vis_points(ax, centers,  "centers_" + str(centers.shape[0]), ptsize=1)
+
+    ax = fig.add_subplot(143, projection='3d')
+    ax = vis_points(ax, coarse_points,  "coarse_" + str(coarse_points.shape[0]))
+
+    ax = fig.add_subplot(144, projection='3d')
+    ax = vis_points(ax, dense_points[::10,:],  "dense_" + str(dense_points.shape[0]))
+
+    fig.savefig(save_img_path +  "_%i_.png"%idx)
+    print("saved in ", save_img_path +  "_%i_.png"%idx)
+
+    return coarse_points, dense_points
+
+def save_off_points(points, path):
+    with open(path, "w") as file:
+        file.write("OFF\n")
+        file.write(str(int(points.shape[0])) + " 0" + " 0\n")
+        for i in range(points.shape[0]):
+            file.write(
+                str(float(points[i][0])) + " " + str(float(points[i][1])) + " " + str(float(points[i][2])) + "\n")
+
+def random_sample(pc, num):
+    permutation = np.arange(pc.shape[0])
+    np.random.shuffle(permutation)
+    pc = pc[permutation[:num]]
+    return pc
