@@ -175,7 +175,7 @@ def load_model(base_model, ckpt_path, logger = None):
     if state_dict.get('model') is not None:
         base_ckpt = {k.replace("module.", ""): v for k, v in state_dict['model'].items()}
     elif state_dict.get('base_model') is not None:
-        base_ckpt = {k.replace("module.", ""): v for k, v in state_dict['base_model'].items()}
+        # base_ckpt = {k.replace("module.", ""): v for k, v in state_dict['base_model'].items()}
         base_ckpt = {}
         for k, v in state_dict['base_model'].items():
             if k.find("skelnet") is -1: 
@@ -184,8 +184,6 @@ def load_model(base_model, ckpt_path, logger = None):
                 print("skelnet skipping")
                 continue
         base_ckpt = {k.replace("module.", ""): v for k, v in base_ckpt.items()}
-        # model_state_dict = base_model.state_dict()
-        # filtered_state_dict = {k: v for k, v in base_ckpt.items() if k in model_state_dict and model_state_dict[k].size() == v.size()}                                                                                                           
     else:
         raise RuntimeError('mismatch of ckpt weight')
     
