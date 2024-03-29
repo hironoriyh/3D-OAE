@@ -104,6 +104,8 @@ class SkelPointNet(nn.Module):
 
         self.cvx_weights_mlp = nn.Sequential(*cvx_weights_modules)
 
+        # self.knn = KNN(k=2048, transpose_mode=True).float()
+
 
     def compute_loss(self, shape_xyz, skel_xyz, skel_radius, A, w1, w2, w3=0, lap_reg=False):
         bn = skel_xyz.size()[0]
@@ -248,8 +250,9 @@ class SkelPointNet(nn.Module):
         elif(compute_graph is False and recon is False): 
             if group: ## used for point-oae
                 bs = input_pc.shape[0]
+                pt_size = input_pc.shape[1]
                 # num_group = int(scaled_data.shape[0]/group_size)
-                knn = KNN(k=2048, transpose_mode=True).float().cuda(device) # 2048 for Point_tr input
+                knn = KNN(k=pt_size, transpose_mode=True).float().cuda(device) # 2048 for Point_tr input
                 # skel xyz and neibouring
                 # center, _, _  = skelnet(inpc)
                 _, idx = knn(input_pc, skel_xyz) # B G M
