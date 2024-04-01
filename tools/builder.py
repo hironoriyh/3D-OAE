@@ -153,7 +153,7 @@ def save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics, prefix,
             if k.find("skelnet") is -1: 
                 state_dict[k] = v
             else:
-                print("skelnet skipping")
+                # print("skelnet skipping")
                 continue
         torch.save({
                     'base_model' : state_dict if args.distributed else base_model.state_dict(),
@@ -181,7 +181,7 @@ def load_model(base_model, ckpt_path, logger = None):
             if k.find("skelnet") is -1: 
                 base_ckpt[k] = v
             else:
-                print("skelnet skipping")
+                # print("skelnet skipping")
                 continue
         base_ckpt = {k.replace("module.", ""): v for k, v in base_ckpt.items()}
     else:
