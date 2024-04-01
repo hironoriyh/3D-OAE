@@ -220,7 +220,7 @@ class SkelPointNet(nn.Module):
         features = pc[..., 3:].transpose(1, 2).contiguous() if pc.size(-1) > 3 else None
         return xyz, features
 
-    def forward(self, input_pc, compute_graph=False, recon=False, group=False, device=0):
+    def forward(self, input_pc, compute_graph=False, recon=False, group=False):
         # import ipdb; ipdb.set_trace()
         # input_pc = input_pc.cuda(device)
         xyz, features = self.split_point_feature(input_pc)
@@ -252,14 +252,17 @@ class SkelPointNet(nn.Module):
                 bs = input_pc.shape[0]
                 pt_size = input_pc.shape[1]
                 # num_group = int(scaled_data.shape[0]/group_size)
-                knn = KNN(k=pt_size, transpose_mode=True).float().cuda(device) # 2048 for Point_tr input
+                # knn = KNN(k=pt_size, transpose_mode=True).float().cuda(device) # 2048 for Point_tr input
+                knn = KNN(k=pt_size, transpose_mode=True)
                 # skel xyz and neibouring
                 # center, _, _  = skelnet(inpc)
                 _, idx = knn(input_pc, skel_xyz) # B G M
                 # assert idx.size(1) == self.num_group
                 # assert idx.size(2) == self.group_size
-                idx_base = torch.arange(0, bs, device=input_pc.device).view(-1, 1, 1) * input_pc.shape[1]
-                idx = idx + idx_base
+                # idx_base = torch.arange(0, bs, device=input_pc.device).view(-1, 1, 1) * input_pc.shape[1]
+                idx_base = torch.arange(0, bs).view(-1, 1, 1) * input_pc.shape[1]
+                # import pdb; pdb.set_trace()
+                idx = idx + idx_base.cuda()
                 idx = idx.view(-1)
                 neighborhood = input_pc.view(bs * input_pc.shape[1], -1)[idx, :]
                 neighborhood = neighborhood.view(bs, self.num_skel_points, -1, 3).contiguous()

@@ -379,8 +379,8 @@ class PCTransformer(nn.Module):
         skel =np.asarray([x[1]["pos"] for x in lbc.skeleton_graph.nodes.data()])
 
         pcd = self.nprandom_sample(pcd, 2048)
-        inpc = torch.tensor(pcd).float().cuda(0).unsqueeze(0)
-        skelcuda = torch.tensor(skel).float().cuda(0).unsqueeze(0)
+        inpc = torch.tensor(pcd).float().unsqueeze(0).cuda()
+        skelcuda = torch.tensor(skel).float().unsqueeze(0).cuda()
 
         # from knn_cuda import KNN
         groupsize = 16 #2048/128 int(pcd.shape[0]/skel.shape[0])
@@ -412,10 +412,8 @@ class PCTransformer(nn.Module):
 
         # divide the point cloud in the same form. This is important
         if skelnet is not None: #skelnet 
-            # import ipdb;ipdb.set_trace()
-            # inpc1 = inpc.to(torch.device("cuda:1"))
-            # center, _, _, neighborhood = skelnet(inpc1, group=True, device=torch.device("cuda:1")) 
-            center, _, _, neighborhood = skelnet(inpc, group=True, device=0) 
+            with torch.no_grad():
+                center, _, _, neighborhood = skelnet(inpc, group=True) 
 
                        
         elif pc_skeletor is True: # just inference as comparison to skelnet

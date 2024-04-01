@@ -75,14 +75,6 @@ class OAE_PoinTr(nn.Module):
 
         self.fold_step = int(pow(self.num_pred//self.num_query, 0.5) + 0.5)
         self.base_model = PCTransformer(config = config, in_chans = 3, embed_dim = self.trans_dim, depth = [12, 8], drop_rate = 0., num_query = self.num_query, knn_layer = self.knn_layer)
-        # import ipdb;ipdb.set_trace()
-
-        # if(config.use_skelnet): 
-        #     self.use_skelnet = True
-        #     self.skelnet = SkelPointNet(config.num_group, input_channels=0, use_xyz=True)
-        #     skelpath = config.skelnet_ckpt
-        #     self.skelnet.load_state_dict(torch.load(skelpath))
-        #     self.skelnet.eval() 
 
         self.foldingnet = Fold(self.trans_dim, step = self.fold_step, hidden_dim = 256)  # rebuild a cluster point
 
